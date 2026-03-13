@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { StyleSheet, View, Text, ActivityIndicator } from 'react-native';
 import { Provider as PaperProvider } from 'react-native-paper';
 import { DatabaseService } from './src/services/dbService';
-import Dashboard from './src/screens/Dashboard';
+import AppNavigator from './src/navigation/AppNavigator';
 
 export default function App() {
   const [isReady, setIsReady] = useState(false);
@@ -43,7 +43,7 @@ export default function App() {
 
   return (
     <PaperProvider>
-      <Dashboard />
+      <AppNavigator />
     </PaperProvider>
   );
 }
