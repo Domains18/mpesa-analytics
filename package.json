@@ -3,17 +3,15 @@
   "version": "1.0.0",
   "main": "index.ts",
   "scripts": {
-    "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
-    "web": "expo start --web"
+    "start": "npx react-native start",
+    "android": "npx react-native run-android",
+    "ios": "npx react-native run-ios"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "^3.0.1",
     "@react-navigation/bottom-tabs": "^7.15.5",
     "@react-navigation/native": "^7.1.33",
     "@react-navigation/stack": "^7.8.5",
-    "expo": "~55.0.6",
     "expo-build-properties": "^55.0.9",
     "expo-sqlite": "^55.0.10",
     "expo-status-bar": "~55.0.4",
@@ -27,6 +25,7 @@
     "react-native-svg": "^15.15.3"
   },
   "devDependencies": {
+    "@react-native-community/cli": "^20.1.2",
     "@types/react": "~19.2.2",
     "typescript": "~5.9.2"
   },
