@@ -1,107 +1,50 @@
-# M-Pesa SMS Analytics
+# Welcome to your Expo app 👋
 
-**Android app that reads M-Pesa SMS messages and provides comprehensive financial analytics.**
+This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
 
----
+## Get started
 
-## 🎯 **Project Goal**
+1. Install dependencies
 
-Parse M-Pesa transaction SMS messages and generate:
-- Transaction history with search & filtering
-- Spending analytics and visualizations
-- Cash flow tracking with charts
-- Merchant insights and rankings
-- Balance trends over time
+   ```bash
+   npm install
+   ```
 
----
+2. Start the app
 
-## 🏗️ **Tech Stack**
+   ```bash
+   npx expo start
+   ```
 
-- **React Native** (Expo + TypeScript)
-- **SQLite** (Local database via expo-sqlite)
-- **React Native Paper** (Material Design UI)
-- **React Native Chart Kit** (Line, Bar, Pie charts)
-- **React Navigation** (Bottom tabs)
+In the output, you'll find options to open the app in a
 
----
+- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
+- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
+- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
+- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
 
-## ✨ **Features**
+You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
 
-### ✅ Completed (MVP - Feature Complete!)
+## Get a fresh project
 
-**Core Functionality:**
-- [x] M-Pesa message parser (8 transaction types, 100% test coverage)
-- [x] SMS access service (READ_SMS permission with explanation)
-- [x] SQLite database (full CRUD + deduplication)
-- [x] Sync service (full + incremental sync)
-- [x] Analytics engine (stats, cash flow, merchants, categories)
+When you're ready, run:
 
-**UI Screens:**
-- [x] **Dashboard** - Balance, stats, recent transactions
-- [x] **Transactions** - Full list with search & filter
-- [x] **Analytics** - Charts and visualizations
-- [x] **Settings** - Permissions, data management, info
+```bash
+npm run reset-project
+```
 
-**Navigation:**
-- [x] Bottom tab navigation (4 screens)
-- [x] Material Design icons
-- [x] Active/inactive states
+This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
 
-**Analytics & Visualizations:**
-- [x] Transaction statistics (income, expenses, net)
-- [x] Cash flow line chart (daily net change)
-- [x] Top merchants bar chart
-- [x] Category breakdown pie chart
-- [x] Period selector (7d, 30d, 90d)
-- [x] Merchant ranking list
+## Learn more
 
-**UX Features:**
-- [x] Pull-to-refresh on all screens
-- [x] Search transactions (merchant, phone, account, amount)
-- [x] Filter by transaction type
-- [x] Loading states
-- [x] Empty states
-- [x] Error handling
-- [x] Confirmation dialogs
+To learn more about developing your project with Expo, look at the following resources:
 
-### 🚀 Future Enhancements
+- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
+- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
 
-- [ ] Export to CSV/PDF
-- [ ] Dark mode
-- [ ] Push notifications for new transactions
-- [ ] Background sync
-- [ ] Budget tracking
-- [ ] Recurring payment detection
-- [ ] AI-powered insights
-- [ ] Cloud backup (optional)
+## Join the community
 
----
+Join our community of developers creating universal apps.
 
-## 📱 **Supported M-Pesa Transaction Types**
-
-1. ✅ **Received Money** (P2P / C2B)
-2. ✅ **Sent Money** (P2P)
-3. ✅ **Buy Goods** (Till Number)
-4. ✅ **Pay Bill** (Paybill)
-5. ✅ **Withdraw Cash** (Agent)
-6. ✅ **Deposit Cash** (Agent)
-7. ✅ **Airtime Purchase**
-8. ✅ **Lipa na M-PESA** (STK Push)
-
----
-
-## 🔒 **Privacy & Security**
-
-- **100% Local** - All data stored on device (SQLite)
-- **No Cloud** - Zero server communication
-- **SMS Filtered** - Only reads M-Pesa messages (sender: "MPESA")
-- **Transparent** - Clear permission explanation
-- **User Control** - Delete all data anytime
-- **No Tracking** - No analytics, no telemetry
-
----
-
-## 📄 **License**
-MIT
----
-
+- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
+- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
