@@ -123,7 +123,6 @@ export function readMpesaSms(opts: { fromDate?: number } = {}): Promise<RawSms[]
     if (opts.fromDate) {
       filter.minDate = opts.fromDate;
     }
-    
     SmsAndroid.list(
       JSON.stringify(filter),
       (err: string) => reject(new Error(`SMS read failed: ${err}`)),
