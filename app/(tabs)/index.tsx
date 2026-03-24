@@ -3,7 +3,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Colors, Fonts } from '@/constants/theme';
 import { useApp } from '@/store/app-context';
-import { requestSmsPermission } from '@/lib/sms-reader';
+import { requestSmsPermission, openAppSettings } from '@/lib/sms-reader';
 import { useState, useCallback } from 'react';
 import { router } from 'expo-router';
 
@@ -35,14 +35,22 @@ export default function DashboardScreen() {
   const handleSync = useCallback(async () => {
     if (Platform.OS === 'android') {
       const status = await requestSmsPermission();
-      if (status !== 'granted') {
+      if (status === 'never_ask_again') {
+        setSyncResult('Permission blocked — tap to open Settings');
+        return;
+      }
+      if (status === 'denied') {
         setSyncResult('SMS permission denied');
         return;
       }
     }
     const result = await syncSms();
-    setSyncResult(`Synced: ${result.imported} new, ${result.skipped} existing`);
-    setTimeout(() => setSyncResult(null), 4000);
+    if (result.total === 0) {
+      setSyncResult('No M-Pesa SMS found in inbox');
+    } else {
+      setSyncResult(`Synced: ${result.imported} new, ${result.skipped} already imported`);
+    }
+    setTimeout(() => setSyncResult(null), 5000);
   }, [syncSms]);
 
   const maxBar = Math.max(...chartData.map((d) => d.amount), 1);
@@ -65,10 +73,16 @@ export default function DashboardScreen() {
 
         {/* Sync feedback */}
         {syncResult && (
-          <View style={styles.syncBanner}>
+          <TouchableOpacity
+            style={styles.syncBanner}
+            onPress={syncResult.includes('Settings') ? openAppSettings : undefined}
+            activeOpacity={syncResult.includes('Settings') ? 0.7 : 1}>
             <MaterialIcons name="check-circle" size={14} color={Colors.primary} />
             <Text style={styles.syncBannerText}>{syncResult}</Text>
-          </View>
+            {syncResult.includes('Settings') && (
+              <MaterialIcons name="open-in-new" size={13} color={Colors.primary} />
+            )}
+          </TouchableOpacity>
         )}
         {error && (
           <View style={[styles.syncBanner, styles.syncBannerError]}>

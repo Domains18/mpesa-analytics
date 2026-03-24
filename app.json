@@ -23,7 +23,8 @@
       "permissions": [
         "android.permission.READ_SMS",
         "android.permission.RECEIVE_SMS"
-      ]
+      ],
+      "package": "com.domains.mpesaanalytics"
     },
     "web": {
       "output": "static",

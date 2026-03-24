@@ -1,22 +1,30 @@
 import * as SQLite from 'expo-sqlite';
 import { Transaction, Category } from '@/types/transaction';
 
+function uuid(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
+
+// openDatabaseSync avoids the ensureDatabasePathExistAsync failure that
+// openDatabaseAsync triggers on some devices/emulators.
 let _db: SQLite.SQLiteDatabase | null = null;
 
-async function getDb(): Promise<SQLite.SQLiteDatabase> {
+function getDb(): SQLite.SQLiteDatabase {
   if (!_db) {
-    _db = await SQLite.openDatabaseAsync('mpesa.db');
-    await migrate(_db);
+    _db = SQLite.openDatabaseSync('mpesa.db');
+    migrate(_db);
   }
   return _db;
 }
 
-// ─── Schema ───────────────────────────────────────────────────────────────────
 
-async function migrate(db: SQLite.SQLiteDatabase) {
-  await db.execAsync(`
-    PRAGMA journal_mode = WAL;
+function migrate(db: SQLite.SQLiteDatabase) {
+  db.execSync(`PRAGMA journal_mode = WAL;`);
 
+  db.execSync(`
     CREATE TABLE IF NOT EXISTS transactions (
       id          TEXT PRIMARY KEY,
       ref         TEXT,
@@ -54,11 +62,11 @@ async function migrate(db: SQLite.SQLiteDatabase) {
     );
   `);
 
-  await seedDefaultCategories(db);
+  seedDefaultCategories(db);
 }
 
-async function seedDefaultCategories(db: SQLite.SQLiteDatabase) {
-  const existing = await db.getFirstAsync<{ count: number }>(
+function seedDefaultCategories(db: SQLite.SQLiteDatabase) {
+  const existing = db.getFirstSync<{ count: number }>(
     'SELECT COUNT(*) as count FROM categories'
   );
   if ((existing?.count ?? 0) > 0) return;
@@ -74,11 +82,11 @@ async function seedDefaultCategories(db: SQLite.SQLiteDatabase) {
     { name: 'Lifestyle',     icon: 'theater-comedy',      color: '#674ba4', budget: 10000, keywords: ['NETFLIX','SHOWMAX','DSTV','GYM','SALON','SPA','CINEMA'] },
   ];
 
-  await db.withTransactionAsync(async () => {
+  db.withTransactionSync(() => {
     for (const cat of defaults) {
-      await db.runAsync(
+      db.runSync(
         `INSERT OR IGNORE INTO categories (id, name, icon, color, budget, keywords) VALUES (?, ?, ?, ?, ?, ?)`,
-        [crypto.randomUUID(), cat.name, cat.icon, cat.color, cat.budget, JSON.stringify(cat.keywords)]
+        [uuid(), cat.name, cat.icon, cat.color, cat.budget, JSON.stringify(cat.keywords)]
       );
     }
   });
@@ -87,22 +95,22 @@ async function seedDefaultCategories(db: SQLite.SQLiteDatabase) {
 // ─── Transactions ─────────────────────────────────────────────────────────────
 
 export async function insertTransactions(txs: Transaction[]): Promise<{ imported: number; skipped: number }> {
-  const db = await getDb();
+  const db = getDb();
   let imported = 0;
   let skipped = 0;
 
-  await db.withTransactionAsync(async () => {
+  db.withTransactionSync(() => {
     for (const tx of txs) {
-      const existing = await db.getFirstAsync<{ id: string }>(
+      const existing = db.getFirstSync<{ id: string }>(
         'SELECT id FROM transactions WHERE id = ? OR ref = ?',
         [tx.id, tx.ref]
       );
       if (existing) { skipped++; continue; }
 
-      await db.runAsync(
+      db.runSync(
         `INSERT INTO transactions (id, ref, type, amount, balance, party, phone, date, cost, category, raw_message)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [tx.id, tx.ref, tx.type, tx.amount, tx.balance, tx.party, tx.phone, tx.date, tx.cost, tx.category, tx.rawMessage]
+        [tx.id, tx.ref, tx.type, tx.amount, tx.balance ?? null, tx.party, tx.phone ?? null, tx.date, tx.cost, tx.category ?? null, tx.rawMessage]
       );
       imported++;
     }
@@ -119,7 +127,7 @@ export async function getTransactions(opts: {
   from?: number;
   to?: number;
 } = {}): Promise<Transaction[]> {
-  const db = await getDb();
+  const db = getDb();
   const conditions: string[] = [];
   const params: (string | number)[] = [];
 
@@ -128,56 +136,50 @@ export async function getTransactions(opts: {
   if (opts.from)     { conditions.push('date >= ?');    params.push(opts.from); }
   if (opts.to)       { conditions.push('date <= ?');    params.push(opts.to); }
 
-  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
-  const limit  = opts.limit  ? `LIMIT ${opts.limit}`   : 'LIMIT 200';
+  const where  = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+  const limit  = `LIMIT ${opts.limit ?? 200}`;
   const offset = opts.offset ? `OFFSET ${opts.offset}` : '';
 
-  const rows = await db.getAllAsync<Transaction>(
+  return db.getAllSync<Transaction>(
     `SELECT id, ref, type, amount, balance, party, phone, date, cost, category, raw_message as rawMessage
      FROM transactions ${where} ORDER BY date DESC ${limit} ${offset}`,
     params
   );
-  return rows;
 }
 
 export async function updateCategory(txId: string, category: string): Promise<void> {
-  const db = await getDb();
-  await db.runAsync('UPDATE transactions SET category = ? WHERE id = ?', [category, txId]);
+  getDb().runSync('UPDATE transactions SET category = ? WHERE id = ?', [category, txId]);
 }
 
 export async function getUncategorized(): Promise<Transaction[]> {
-  const db = await getDb();
-  return db.getAllAsync<Transaction>(
+  return getDb().getAllSync<Transaction>(
     `SELECT id, ref, type, amount, balance, party, phone, date, cost, category, raw_message as rawMessage
      FROM transactions WHERE category IS NULL ORDER BY date DESC LIMIT 50`
   );
 }
 
 export async function getTransactionCount(): Promise<number> {
-  const db = await getDb();
-  const r = await db.getFirstAsync<{ c: number }>('SELECT COUNT(*) as c FROM transactions');
+  const r = getDb().getFirstSync<{ c: number }>('SELECT COUNT(*) as c FROM transactions');
   return r?.c ?? 0;
 }
 
 export async function clearAllTransactions(): Promise<void> {
-  const db = await getDb();
-  await db.runAsync('DELETE FROM transactions');
-  await db.runAsync('DELETE FROM sync_log');
+  const db = getDb();
+  db.runSync('DELETE FROM transactions');
+  db.runSync('DELETE FROM sync_log');
 }
 
 // ─── Categories ───────────────────────────────────────────────────────────────
 
 export async function getCategories(): Promise<Category[]> {
-  const db = await getDb();
-  const rows = await db.getAllAsync<{ id: string; name: string; icon: string; color: string; budget: number; keywords: string }>(
+  const rows = getDb().getAllSync<{ id: string; name: string; icon: string; color: string; budget: number; keywords: string }>(
     'SELECT * FROM categories ORDER BY name'
   );
-  return rows.map((r) => ({ ...r, keywords: JSON.parse(r.keywords || '[]') }));
+  return rows.map((r: { id: string; name: string; icon: string; color: string; budget: number; keywords: string }) => ({ ...r, keywords: JSON.parse(r.keywords || '[]') }));
 }
 
 export async function upsertCategory(cat: Category): Promise<void> {
-  const db = await getDb();
-  await db.runAsync(
+  getDb().runSync(
     `INSERT INTO categories (id, name, icon, color, budget, keywords)
      VALUES (?, ?, ?, ?, ?, ?)
      ON CONFLICT(name) DO UPDATE SET icon=excluded.icon, color=excluded.color, budget=excluded.budget, keywords=excluded.keywords`,
@@ -186,44 +188,44 @@ export async function upsertCategory(cat: Category): Promise<void> {
 }
 
 export async function deleteCategory(id: string): Promise<void> {
-  const db = await getDb();
-  await db.runAsync('DELETE FROM categories WHERE id = ?', [id]);
+  getDb().runSync('DELETE FROM categories WHERE id = ?', [id]);
 }
 
 // ─── Auto-categorize ──────────────────────────────────────────────────────────
 
 export async function autoCategorizePending(): Promise<number> {
-  const db = await getDb();
+  const db = getDb();
   const categories = await getCategories();
   const uncategorized = await getUncategorized();
   let count = 0;
 
-  for (const tx of uncategorized) {
-    const party = tx.party.toUpperCase();
-    for (const cat of categories) {
-      if (cat.keywords.some((kw) => party.includes(kw.toUpperCase()))) {
-        await db.runAsync('UPDATE transactions SET category = ? WHERE id = ?', [cat.name, tx.id]);
-        count++;
-        break;
+  db.withTransactionSync(() => {
+    for (const tx of uncategorized) {
+      const party = tx.party.toUpperCase();
+      for (const cat of categories) {
+        if (cat.keywords.some((kw) => party.includes(kw.toUpperCase()))) {
+          db.runSync('UPDATE transactions SET category = ? WHERE id = ?', [cat.name, tx.id]);
+          count++;
+          break;
+        }
       }
     }
-  }
+  });
+
   return count;
 }
 
 // ─── Sync log ─────────────────────────────────────────────────────────────────
 
 export async function logSync(imported: number, skipped: number, failed: number): Promise<void> {
-  const db = await getDb();
-  await db.runAsync(
+  getDb().runSync(
     'INSERT INTO sync_log (synced_at, imported, skipped, failed) VALUES (?, ?, ?, ?)',
     [Date.now(), imported, skipped, failed]
   );
 }
 
 export async function getLastSync(): Promise<number | null> {
-  const db = await getDb();
-  const r = await db.getFirstAsync<{ synced_at: number }>(
+  const r = getDb().getFirstSync<{ synced_at: number }>(
     'SELECT synced_at FROM sync_log ORDER BY id DESC LIMIT 1'
   );
   return r?.synced_at ?? null;

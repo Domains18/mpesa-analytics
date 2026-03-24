@@ -42,7 +42,7 @@ function parseMpesaDate(body: string, smsDate?: number): number {
 function extractRef(body: string): string {
   // Ref appears at start: capital letters + digits e.g. "QB92J1K0L"
   const m = body.match(/^([A-Z]{2}\d{8}[A-Z0-9]?|[A-Z0-9]{10,12})\s/);
-  return m ? m[1] : crypto.randomUUID().replace(/-/g, '').substring(0, 10).toUpperCase();
+  return m ? m[1] : Math.random().toString(36).substring(2, 12).toUpperCase();
 }
 
 function extractBalance(body: string): number | null {
