@@ -1,9 +1,8 @@
 import { Transaction } from '@/types/transaction';
 import { AnalyticsSummary } from '@/types/transaction';
 import { getApiKey, isAiParserEnabled } from '@/lib/ai-config';
+import { OpenRouter } from '@openrouter/sdk';
 
-const API_URL = 'https://api.anthropic.com/v1/messages';
-const MODEL = 'claude-haiku-4-5-20251001';
 
 const SYSTEM_PROMPT = `You are a concise personal finance analyst for an M-Pesa user in Kenya. You analyze their transaction data and provide actionable insights.
 
@@ -74,6 +73,8 @@ export async function getAiInsights(
   const apiKey = await getApiKey();
   const enabled = await isAiParserEnabled();
 
+
+
   if (!enabled || !apiKey) {
     throw new Error('AI parser is not configured. Add your API key in Settings.');
   }
@@ -84,32 +85,17 @@ export async function getAiInsights(
 
   const dataPrompt = summarizeTransactions(transactions, summary);
 
-  const response = await fetch(API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      max_tokens: 1024,
-      system: SYSTEM_PROMPT,
-      messages: [
-        {
-          role: 'user',
-          content: `Analyze my M-Pesa transactions:\n\n${dataPrompt}`,
-        },
-      ],
-    }),
+  const openRouter = new OpenRouter({
+    apiKey: apiKey,
   });
 
-  if (!response.ok) {
-    const errBody = await response.text();
-    if (response.status === 401) throw new Error('Invalid API key. Check your key in Settings.');
-    throw new Error(`AI analysis failed (${response.status}): ${errBody}`);
-  }
 
-  const data = await response.json();
-  return data.content?.[0]?.text ?? 'No insights generated.';
+  const response = await openRouter.callModel({
+    model: 'openai/gpt-5.4-mini',
+    instructions: SYSTEM_PROMPT,
+    input: `Analyze my M-Pesa transactions:\n\n${dataPrompt}`,
+  });
+
+  const text = await response.getText();
+  return await JSON.parse(text) || 'Sorry, I could not generate insights at this time.';
 }
