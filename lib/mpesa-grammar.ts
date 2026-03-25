@@ -97,7 +97,6 @@ export const GRAMMAR_RULES: GrammarRule[] = [
     }),
   },
 
-  // ── M-Shwari transfers ────────────────────────────────────────────────────────
   {
     name: 'mshwari_deposit',
     priority: 80,
@@ -119,8 +118,6 @@ export const GRAMMAR_RULES: GrammarRule[] = [
     }),
   },
 
-  // ── Agent deposit ─────────────────────────────────────────────────────────────
-  // "cash from agent" is the distinguishing keyword vs P2P received
   {
     name: 'deposit',
     priority: 70,
@@ -132,7 +129,6 @@ export const GRAMMAR_RULES: GrammarRule[] = [
     }),
   },
 
-  // ── Agent withdrawal ──────────────────────────────────────────────────────────
   {
     name: 'withdrawal',
     priority: 70,
@@ -144,7 +140,6 @@ export const GRAMMAR_RULES: GrammarRule[] = [
     }),
   },
 
-  // ── P2P sent ──────────────────────────────────────────────────────────────────
   {
     name: 'sent',
     priority: 50,
@@ -157,8 +152,7 @@ export const GRAMMAR_RULES: GrammarRule[] = [
     }),
   },
 
-  // ── P2P received ──────────────────────────────────────────────────────────────
-  // NOT_AGENT guards against agent deposit messages matching here.
+
   {
     name: 'received',
     priority: 50,
@@ -171,8 +165,6 @@ export const GRAMMAR_RULES: GrammarRule[] = [
     }),
   },
 
-  // ── Paybill / general payment ─────────────────────────────────────────────────
-  // classify() will upgrade type to 'airtime' if the message body contains that word.
   {
     name: 'payment',
     priority: 40,
@@ -184,7 +176,6 @@ export const GRAMMAR_RULES: GrammarRule[] = [
     }),
   },
 
-  // ── Fuliza overdraft ──────────────────────────────────────────────────────────
   {
     name: 'fuliza',
     priority: 60,
@@ -197,7 +188,6 @@ export const GRAMMAR_RULES: GrammarRule[] = [
   },
 ];
 
-// ── Scoring ────────────────────────────────────────────────────────────────────
 
 function scoreMatch(rule: GrammarRule, match: RegExpMatchArray): number {
   const groups = match.groups ?? {};
@@ -211,12 +201,6 @@ function scoreMatch(rule: GrammarRule, match: RegExpMatchArray): number {
   );
 }
 
-// ── Engine ─────────────────────────────────────────────────────────────────────
-
-/**
- * Evaluates all grammar rules against the body and returns the highest-scoring
- * match. Unlike first-match-wins, this handles ambiguous messages gracefully.
- */
 export function matchGrammar(body: string): MatchResult | null {
   const candidates: ScoredMatch[] = [];
 
@@ -232,16 +216,10 @@ export function matchGrammar(body: string): MatchResult | null {
 
   candidates.sort((a, b) => b.score - a.score);
 
-  // Strip scoring metadata before returning
   const { score: _s, rule: _r, ...best } = candidates[0];
   return best;
 }
-
-// ── Classification ─────────────────────────────────────────────────────────────
-//
-// Semantic overrides that are message-level concerns, not grammar-level.
-// The grammar produces a structural type; classify() refines it.
-
+// e grammar produces a structural type; classify() refines it.
 export function classify(result: MatchResult, body: string): MatchResult {
   if (result.type === 'payment' && /airtime/i.test(body)) {
     return { ...result, type: 'airtime' };
@@ -252,11 +230,6 @@ export function classify(result: MatchResult, body: string): MatchResult {
   return result;
 }
 
-// ── Fallback Parser ────────────────────────────────────────────────────────────
-//
-// When no grammar rule matches, extract whatever we can from the raw message.
-// Returns null only if there is no monetary value — i.e. probably not an M-Pesa
-// transaction at all.
 
 export function fallbackParse(body: string): Partial<MatchResult> | null {
   const amountMatch = body.match(/Ksh\s?([\d,]+\.?\d*)/i);
@@ -279,12 +252,7 @@ export function fallbackParse(body: string): Partial<MatchResult> | null {
   };
 }
 
-// ── Debug ──────────────────────────────────────────────────────────────────────
 
-/**
- * Returns all rules that match the body, sorted by score descending.
- * Use this to inspect ambiguous messages or tune rule priorities.
- */
 export function debugGrammar(
   body: string,
 ): { rule: string; score: number; groups: Groups }[] {

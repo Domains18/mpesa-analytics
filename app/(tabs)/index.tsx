@@ -8,6 +8,124 @@ import { useState, useCallback } from 'react';
 import { router } from 'expo-router';
 import { getAiInsights } from '@/lib/ai-insights';
 
+// ─── Spending Line Chart ──────────────────────────────────────────────────────
+// Draws a 7-day line graph using absolutely-positioned Views + rotation math.
+// No SVG library required.
+
+const CHART_H = 100; // line area height (labels sit below this)
+const PT_R    = 4;   // point dot radius
+
+function SpendingLineChart({
+  data,
+  maxVal,
+}: {
+  data: { amount: number; label: string }[];
+  maxVal: number;
+}) {
+  const [w, setW] = useState(0);
+  const n = data.length;
+
+  // Compute (x, y) canvas coords for each point
+  const pts = w > 0 && n > 1
+    ? data.map((d, i) => ({
+        x: PT_R + (i / (n - 1)) * (w - PT_R * 2),
+        y: maxVal > 0
+          ? CHART_H - Math.max(PT_R * 2, (d.amount / maxVal) * CHART_H)
+          : CHART_H * 0.5,
+        label: d.label,
+        today: i === n - 1,
+      }))
+    : [];
+
+  return (
+    <View
+      style={{ height: CHART_H + 28 }}
+      onLayout={(e) => setW(e.nativeEvent.layout.width)}
+    >
+      {pts.length > 1 && (
+        <>
+          {/* Line segments: thin View rotated to connect adjacent points */}
+          {pts.slice(0, -1).map((a, i) => {
+            const b = pts[i + 1];
+            const dx = b.x - a.x;
+            const dy = b.y - a.y;
+            const len = Math.hypot(dx, dy);
+            const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+            return (
+              <View
+                key={`l${i}`}
+                style={{
+                  position: 'absolute',
+                  left: (a.x + b.x) / 2 - len / 2,
+                  top:  (a.y + b.y) / 2 - 1,
+                  width: len,
+                  height: 2,
+                  borderRadius: 1,
+                  backgroundColor: Colors.primary,
+                  transform: [{ rotate: `${angle}deg` }],
+                }}
+              />
+            );
+          })}
+
+          {/* Dots — today gets a soft halo ring */}
+          {pts.map((p, i) => (
+            <View key={`d${i}`}>
+              {p.today && (
+                <View
+                  style={{
+                    position: 'absolute',
+                    left: p.x - PT_R * 2.5,
+                    top:  p.y - PT_R * 2.5,
+                    width:  PT_R * 5,
+                    height: PT_R * 5,
+                    borderRadius: PT_R * 2.5,
+                    backgroundColor: Colors.primaryFixed,
+                  }}
+                />
+              )}
+              <View
+                style={{
+                  position: 'absolute',
+                  left: p.x - PT_R,
+                  top:  p.y - PT_R,
+                  width:  PT_R * 2,
+                  height: PT_R * 2,
+                  borderRadius: PT_R,
+                  backgroundColor: p.today ? Colors.primary : Colors.surfaceContainerLowest,
+                  borderWidth: 1.5,
+                  borderColor: Colors.primary,
+                }}
+              />
+            </View>
+          ))}
+
+          {/* Day labels */}
+          {pts.map((p, i) => (
+            <Text
+              key={`lbl${i}`}
+              style={{
+                position: 'absolute',
+                left: p.x - 12,
+                top: CHART_H + 8,
+                width: 24,
+                textAlign: 'center',
+                fontFamily: p.today ? Fonts.inter.bold : Fonts.inter.medium,
+                fontSize: 11,
+                color: p.today ? Colors.primary : Colors.outlineVariant,
+              }}
+            >
+              {p.label}
+            </Text>
+          ))}
+        </>
+      )}
+    </View>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 function fmt(n: number) {
   return `Ksh ${n.toLocaleString('en-KE', { maximumFractionDigits: 0 })}`;
 }
@@ -203,22 +321,7 @@ export default function DashboardScreen() {
                 <ActivityIndicator color={Colors.primary} />
               </View>
             ) : (
-              <View style={styles.chart}>
-                {chartData.map((item, i) => {
-                  const barH = Math.max(6, (item.amount / maxBar) * 120);
-                  const isToday = i === chartData.length - 1;
-                  return (
-                    <View key={i} style={styles.barGroup}>
-                      <View style={styles.barTrack}>
-                        <View style={[styles.bar, { height: barH }, isToday && styles.barActive]} />
-                      </View>
-                      <Text style={[styles.barLabel, isToday && styles.barLabelActive]}>
-                        {item.label}
-                      </Text>
-                    </View>
-                  );
-                })}
-              </View>
+              <SpendingLineChart data={chartData} maxVal={maxBar} />
             )}
           </View>
 
@@ -350,14 +453,7 @@ const styles = StyleSheet.create({
   chartHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 },
   chartTitle: { fontFamily: Fonts.manrope.semiBold, fontSize: 15, color: Colors.onSurface },
   chartPeriod: { fontFamily: Fonts.inter.regular, fontSize: 12, color: Colors.onSurfaceVariant },
-  chartLoading: { height: 140, alignItems: 'center', justifyContent: 'center' },
-  chart: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', height: 140, paddingBottom: 24 },
-  barGroup: { flex: 1, alignItems: 'center', justifyContent: 'flex-end' },
-  barTrack: { width: 28, justifyContent: 'flex-end', height: 120, borderRadius: 6, backgroundColor: Colors.surfaceContainerLow },
-  bar: { width: '100%', borderRadius: 6, backgroundColor: Colors.surfaceContainer },
-  barActive: { backgroundColor: Colors.primary },
-  barLabel: { fontFamily: Fonts.inter.medium, fontSize: 11, color: Colors.outlineVariant, marginTop: 6 },
-  barLabelActive: { color: Colors.primary, fontFamily: Fonts.inter.bold },
+  chartLoading: { height: CHART_H + 28, alignItems: 'center', justifyContent: 'center' },
   alertBanner: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#eaf4ff', borderRadius: 14, padding: 14, borderWidth: 1, borderColor: Colors.secondaryContainer },
   alertIcon: { width: 32, height: 32, borderRadius: 8, backgroundColor: Colors.secondaryContainer, alignItems: 'center', justifyContent: 'center' },
   alertText: { flex: 1, fontFamily: Fonts.inter.regular, fontSize: 13, color: Colors.secondary, lineHeight: 18 },
