@@ -1,10 +1,10 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Alert, TextInput } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useState, useEffect } from 'react';
 import { Colors, Fonts } from '@/constants/theme';
 import { useApp } from '@/store/app-context';
-import { getApiKey, setApiKey, removeApiKey, isAiParserEnabled, setAiParserEnabled } from '@/lib/ai-config';
+import { getApiKey, isAiParserEnabled, setAiParserEnabled } from '@/lib/ai-config';
 
 type SettingRowProps = {
   icon: string;
@@ -72,7 +72,6 @@ export default function SettingsScreen() {
 
   // AI Parser state
   const [aiEnabled, setAiEnabled] = useState(false);
-  const [apiKeyInput, setApiKeyInput] = useState('');
   const [hasApiKey, setHasApiKey] = useState(false);
   const [showApiKeyInput, setShowApiKeyInput] = useState(false);
 
@@ -80,6 +79,7 @@ export default function SettingsScreen() {
     (async () => {
       const enabled = await isAiParserEnabled();
       const key = await getApiKey();
+      console.log('AI Parser enabled:', enabled, 'API Key exists:', !!key);
       setAiEnabled(enabled);
       setHasApiKey(!!key);
     })();
@@ -94,40 +94,7 @@ export default function SettingsScreen() {
     await setAiParserEnabled(enabled);
   }
 
-  async function handleSaveApiKey() {
-    const trimmed = apiKeyInput.trim();
-    if (!trimmed.startsWith('sk-ant-')) {
-      Alert.alert('Invalid Key', 'API key should start with "sk-ant-".');
-      return;
-    }
-    await setApiKey(trimmed);
-    setHasApiKey(true);
-    setShowApiKeyInput(false);
-    setApiKeyInput('');
-    setAiEnabled(true);
-    await setAiParserEnabled(true);
-    Alert.alert('Saved', 'AI parser is now active. Failed SMS messages will be sent to Claude for parsing.');
-  }
 
-  function handleRemoveApiKey() {
-    Alert.alert(
-      'Remove API Key',
-      'This will disable AI-powered parsing. You can re-add the key anytime.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: async () => {
-            await removeApiKey();
-            await setAiParserEnabled(false);
-            setHasApiKey(false);
-            setAiEnabled(false);
-          },
-        },
-      ]
-    );
-  }
 
   const lastSyncLabel = lastSync
     ? new Date(lastSync).toLocaleString('en-KE', { dateStyle: 'medium', timeStyle: 'short' })
@@ -245,31 +212,6 @@ export default function SettingsScreen() {
               value={aiEnabled}
               onToggle={handleToggleAi}
             />
-            {showApiKeyInput && (
-              <View style={styles.apiKeySection}>
-                <TextInput
-                  style={styles.apiKeyInput}
-                  placeholder="sk-ant-api03-..."
-                  placeholderTextColor={Colors.outlineVariant}
-                  value={apiKeyInput}
-                  onChangeText={setApiKeyInput}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  secureTextEntry
-                />
-                <View style={styles.apiKeyActions}>
-                  <TouchableOpacity
-                    style={styles.apiKeyCancelBtn}
-                    onPress={() => { setShowApiKeyInput(false); setApiKeyInput(''); }}
-                  >
-                    <Text style={styles.apiKeyCancelText}>Cancel</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.apiKeySaveBtn} onPress={handleSaveApiKey}>
-                    <Text style={styles.apiKeySaveText}>Save Key</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            )}
             {hasApiKey && !showApiKeyInput && (
               <View style={styles.settingRow}>
                 <View style={styles.settingIcon}>
@@ -278,9 +220,6 @@ export default function SettingsScreen() {
                 <Text style={[styles.settingLabel, { color: Colors.primary }]}>API Key configured</Text>
                 <TouchableOpacity onPress={() => setShowApiKeyInput(true)}>
                   <Text style={styles.apiKeyChangeText}>Change</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={handleRemoveApiKey} style={{ marginLeft: 8 }}>
-                  <MaterialIcons name="delete-outline" size={18} color={Colors.error} />
                 </TouchableOpacity>
               </View>
             )}

@@ -1,5 +1,6 @@
 import { Transaction, TransactionType } from '@/types/transaction';
 import { getApiKey, isAiParserEnabled } from '@/lib/ai-config';
+import { OpenRouter } from '@openrouter/sdk';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -58,48 +59,57 @@ Respond with a JSON array matching the input indices. If a message cannot be par
 
 // ─── Core ────────────────────────────────────────────────────────────────────
 
-async function callClaude(
+async function InvokeAI(
   apiKey: string,
   messages: SmsBatchItem[],
 ): Promise<(AiParsedTransaction | null)[]> {
-  const userContent = messages
-    .map((m) => `[${m.index}] ${m.body}`)
-    .join('\n\n---\n\n');
+  // const userContent = messages
+  //   .map((m) => `[${m.index}] ${m.body}`)
+  //   .join('\n\n---\n\n');
 
-  const response = await fetch(API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      max_tokens: 4096,
-      system: SYSTEM_PROMPT,
-      messages: [
-        {
-          role: 'user',
-          content: `Parse these ${messages.length} M-Pesa SMS messages. Return a JSON array where each element corresponds to the message index. Use null for unparseable messages.\n\n${userContent}`,
-        },
-        {
-          role: 'assistant',
-          content: '[',
-        },
-      ],
-    }),
+  // const response = await fetch(API_URL, {
+  //   method: 'POST',
+  //   headers: {
+  //     'Content-Type': 'application/json',
+  //     'x-api-key': apiKey,
+  //     'anthropic-version': '2023-06-01',
+  //   },
+  //   body: JSON.stringify({
+  //     model: MODEL,
+  //     max_tokens: 4096,
+  //     system: SYSTEM_PROMPT,
+  //     messages: [
+  //       {
+  //         role: 'user',
+  //         content: `Parse these ${messages.length} M-Pesa SMS messages. Return a JSON array where each element corresponds to the message index. Use null for unparseable messages.\n\n${userContent}`,
+  //       },
+  //       {
+  //         role: 'assistant',
+  //         content: '[',
+  //       },
+  //     ],
+  //   }),
+  // });
+
+  const openRouter = new OpenRouter({
+    apiKey: '<OPENROUTER_API_KEY>',
   });
 
-  if (!response.ok) {
-    const errBody = await response.text();
-    throw new Error(`Claude API error ${response.status}: ${errBody}`);
-  }
+  const response = await openRouter.callModel({
+    model: 'openai/gpt-5.4-mini',
+    instructions: SYSTEM_PROMPT,
+    input: `Parse these ${messages.length} M-Pesa SMS messages. Return a JSON array where each element corresponds to the message index. Use null for unparseable messages.\n\n${messages
+      .map((m) => `[${m.index}] ${m.body}`)
+      .join('\n\n---\n\n')}`,
+  });
 
-  const data = await response.json();
-  const text = '[' + (data.content?.[0]?.text ?? '[]');
+  const text = await response.getText();
+  const data = await JSON.parse(text);
+
+  console.log('[AI_RESPONSE]', data);
 
   // Extract JSON array from response
-  const jsonMatch = text.match(/\[[\s\S]*\]/);
+  const jsonMatch = data.match(/\[[\s\S]*\]/);
   if (!jsonMatch) return messages.map(() => null);
 
   try {
@@ -165,7 +175,7 @@ export async function aiParseBatch(
     }));
 
     try {
-      const results = await callClaude(apiKey, batchItems);
+      const results = await InvokeAI(apiKey, batchItems);
 
       for (let j = 0; j < chunk.length; j++) {
         const result = results[j];
