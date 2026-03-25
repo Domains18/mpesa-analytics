@@ -58,3 +58,11 @@ export interface SyncResult {
   skipped: number;        // already in DB
   failed: number;         // parse failures
 }
+
+
+export type RawSms = {
+  id: string;
+  address: string;
+  body: string;
+  date: number;
+};

@@ -1,9 +1,10 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Colors, Fonts } from '@/constants/theme';
 import { useApp } from '@/store/app-context';
+import { getApiKey, isAiParserEnabled, setAiParserEnabled } from '@/lib/ai-config';
 
 type SettingRowProps = {
   icon: string;
@@ -68,6 +69,32 @@ export default function SettingsScreen() {
   const [weeklyReport, setWeeklyReport] = useState(true);
   const [budgetAlerts, setBudgetAlerts] = useState(true);
   const [loginActivity, setLoginActivity] = useState(false);
+
+  // AI Parser state
+  const [aiEnabled, setAiEnabled] = useState(false);
+  const [hasApiKey, setHasApiKey] = useState(false);
+  const [showApiKeyInput, setShowApiKeyInput] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const enabled = await isAiParserEnabled();
+      const key = await getApiKey();
+      console.log('AI Parser enabled:', enabled, 'API Key exists:', !!key);
+      setAiEnabled(enabled);
+      setHasApiKey(!!key);
+    })();
+  }, []);
+
+  async function handleToggleAi(enabled: boolean) {
+    if (enabled && !hasApiKey) {
+      setShowApiKeyInput(true);
+      return;
+    }
+    setAiEnabled(enabled);
+    await setAiParserEnabled(enabled);
+  }
+
+
 
   const lastSyncLabel = lastSync
     ? new Date(lastSync).toLocaleString('en-KE', { dateStyle: 'medium', timeStyle: 'short' })
@@ -167,6 +194,35 @@ export default function SettingsScreen() {
               value={loginActivity}
               onToggle={setLoginActivity}
             />
+          </View>
+
+          {/* AI Parser */}
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>AI-Powered Parsing</Text>
+            <View style={styles.aiDescription}>
+              <MaterialIcons name="auto-awesome" size={16} color={Colors.secondary} />
+              <Text style={styles.aiDescText}>
+                Uses Claude AI to parse M-Pesa messages that regex cant handle. Handles format changes automatically.
+              </Text>
+            </View>
+            <ToggleRow
+              icon="psychology"
+              label="Enable AI Parser"
+              subtitle={hasApiKey ? 'Fallback for unrecognized SMS formats' : 'Requires an Anthropic API key'}
+              value={aiEnabled}
+              onToggle={handleToggleAi}
+            />
+            {hasApiKey && !showApiKeyInput && (
+              <View style={styles.settingRow}>
+                <View style={styles.settingIcon}>
+                  <MaterialIcons name="key" size={18} color={Colors.onSurfaceVariant} />
+                </View>
+                <Text style={[styles.settingLabel, { color: Colors.primary }]}>API Key configured</Text>
+                <TouchableOpacity onPress={() => setShowApiKeyInput(true)}>
+                  <Text style={styles.apiKeyChangeText}>Change</Text>
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
 
           {/* Data */}
@@ -364,6 +420,68 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: Colors.onSurfaceVariant,
     marginTop: 1,
+  },
+  aiDescription: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 4,
+  },
+  aiDescText: {
+    flex: 1,
+    fontFamily: Fonts.inter.regular,
+    fontSize: 12,
+    color: Colors.onSurfaceVariant,
+    lineHeight: 17,
+  },
+  apiKeySection: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    gap: 10,
+  },
+  apiKeyInput: {
+    fontFamily: Fonts.inter.regular,
+    fontSize: 13,
+    color: Colors.onSurface,
+    backgroundColor: Colors.surfaceContainerLow,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: Colors.outlineVariant,
+  },
+  apiKeyActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+  },
+  apiKeyCancelBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  apiKeyCancelText: {
+    fontFamily: Fonts.inter.medium,
+    fontSize: 13,
+    color: Colors.onSurfaceVariant,
+  },
+  apiKeySaveBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: Colors.primary,
+  },
+  apiKeySaveText: {
+    fontFamily: Fonts.inter.semiBold,
+    fontSize: 13,
+    color: Colors.white,
+  },
+  apiKeyChangeText: {
+    fontFamily: Fonts.inter.medium,
+    fontSize: 12,
+    color: Colors.secondary,
   },
   logoutBtn: {
     flexDirection: 'row',

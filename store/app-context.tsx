@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useReducer, useCallback, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useReducer, useCallback, useEffect } from 'react';
 import { Transaction, Category, AnalyticsSummary, DailySpend, BudgetSummary, SyncResult } from '@/types/transaction';
 import {
   getTransactions,
@@ -12,8 +12,9 @@ import {
   clearAllTransactions,
   getTransactionCount,
 } from '@/lib/database';
-import { readMpesaSms } from '@/lib/sms-reader';
+import { readMpesaSmsBatched } from '@/lib/sms-reader';
 import { parseMpesaBatch } from '@/lib/mpesa-parser';
+import { aiParseBatch } from '@/lib/ai-parser';
 import {
   computeSummary,
   currentMonthBounds,
@@ -34,6 +35,7 @@ interface AppState {
   lastSync: number | null;
   loading: boolean;
   syncing: boolean;
+  syncProgress: number;
   error: string | null;
 }
 
@@ -57,6 +59,7 @@ const INITIAL_STATE: AppState = {
   lastSync: null,
   loading: true,
   syncing: false,
+  syncProgress: 0,
   error: null,
 };
 
@@ -67,6 +70,7 @@ type Action =
   | { type: 'LOAD_SUCCESS'; payload: Partial<AppState> }
   | { type: 'LOAD_ERROR'; error: string }
   | { type: 'SYNC_START' }
+  | { type: 'SYNC_PROGRESS'; processed: number }
   | { type: 'SYNC_END' }
   | { type: 'SET_ERROR'; error: string | null };
 
@@ -79,9 +83,11 @@ function reducer(state: AppState, action: Action): AppState {
     case 'LOAD_ERROR':
       return { ...state, loading: false, error: action.error };
     case 'SYNC_START':
-      return { ...state, syncing: true, error: null };
+      return { ...state, syncing: true, syncProgress: 0, error: null };
+    case 'SYNC_PROGRESS':
+      return { ...state, syncProgress: action.processed };
     case 'SYNC_END':
-      return { ...state, syncing: false };
+      return { ...state, syncing: false, syncProgress: 0 };
     case 'SET_ERROR':
       return { ...state, error: action.error };
     default:
@@ -138,19 +144,35 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const result: SyncResult = { total: 0, imported: 0, skipped: 0, failed: 0 };
 
     try {
-      const rawSms = await readMpesaSms({ fromDate: state.lastSync ?? undefined });
-      result.total = rawSms.length;
+      for await (const batch of readMpesaSmsBatched({ fromDate: state.lastSync ?? undefined })) {
+        result.total += batch.length;
 
-      const { parsed, failed } = parseMpesaBatch(rawSms);
-      result.failed = failed;
+        const { parsed, failed, failedMessages } = parseMpesaBatch(batch);
+        result.failed += failed;
 
-      if (parsed.length > 0) {
-        const { imported, skipped } = await insertTransactions(parsed);
-        result.imported = imported;
-        result.skipped  = skipped;
+        if (parsed.length > 0) {
+          const { imported, skipped } = await insertTransactions(parsed);
+          result.imported += imported;
+          result.skipped  += skipped;
+        }
 
+        // AI fallback for messages regex couldn't parse
+        if (failedMessages.length > 0) {
+          const ai = await aiParseBatch(failedMessages);
+          if (ai.parsed.length > 0) {
+            const { imported, skipped } = await insertTransactions(ai.parsed);
+            result.imported += imported;
+            result.skipped  += skipped;
+            result.failed -= ai.parsed.length; // recovered by AI
+          }
+        }
+
+        dispatch({ type: 'SYNC_PROGRESS', processed: result.total });
+      }
+
+      if (result.imported > 0) {
         await autoCategorizePending();
-        await logSync(imported, skipped, failed);
+        await logSync(result.imported, result.skipped, result.failed);
         await loadData();
       }
     } catch (e: any) {
