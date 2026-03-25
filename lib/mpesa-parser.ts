@@ -2,8 +2,7 @@ import { Transaction, TransactionType } from '@/types/transaction';
 
 // ─── Constants & Regex Fragments ─────────────────────────────────────────────
 
-const CURRENCY_RE = /(?:Ksh|KES|Ksh\.)\s?([\d,]+\.?\d*)/i;
-const PHONE_RE = /(\d{10,}|\d{3}[\s-]\d{3,}[\s-]\d{3,})/;
+
 const DATE_RE = /(\d{1,2})\/(\d{1,2})\/(\d{2,4})\s+at\s+(\d{1,2}):(\d{2})\s*(AM|PM)/i;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -196,19 +195,28 @@ export function parseMpesaSms(sms: { body: string; date: number }): Transaction 
 export function parseMpesaBatch(batch: { body: string; date: number }[]): {
   parsed: Transaction[];
   failed: number;
+  failedMessages: { body: string; date: number }[];
 } {
   const parsed: Transaction[] = [];
+  const failedMessages: { body: string; date: number }[] = [];
   let failed = 0;
 
   for (const sms of batch) {
     try {
       const tx = parseMpesaSms(sms);
-      if (tx) parsed.push(tx);
+      if (tx) {
+        parsed.push(tx);
+      } else {
+        // Regex couldn't parse — candidate for AI fallback
+        failedMessages.push(sms);
+        failed++;
+      }
     } catch (e) {
       console.warn('[PARSER_ERROR]', e, 'SMS:', sms);
+      failedMessages.push(sms);
       failed++;
     }
   }
 
-  return { parsed, failed };
+  return { parsed, failed, failedMessages };
 }

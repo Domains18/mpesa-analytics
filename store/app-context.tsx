@@ -14,6 +14,7 @@ import {
 } from '@/lib/database';
 import { readMpesaSmsBatched } from '@/lib/sms-reader';
 import { parseMpesaBatch } from '@/lib/mpesa-parser';
+import { aiParseBatch } from '@/lib/ai-parser';
 import {
   computeSummary,
   currentMonthBounds,
@@ -146,13 +147,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       for await (const batch of readMpesaSmsBatched({ fromDate: state.lastSync ?? undefined })) {
         result.total += batch.length;
 
-        const { parsed, failed } = parseMpesaBatch(batch);
+        const { parsed, failed, failedMessages } = parseMpesaBatch(batch);
         result.failed += failed;
 
         if (parsed.length > 0) {
           const { imported, skipped } = await insertTransactions(parsed);
           result.imported += imported;
           result.skipped  += skipped;
+        }
+
+        // AI fallback for messages regex couldn't parse
+        if (failedMessages.length > 0) {
+          const ai = await aiParseBatch(failedMessages);
+          if (ai.parsed.length > 0) {
+            const { imported, skipped } = await insertTransactions(ai.parsed);
+            result.imported += imported;
+            result.skipped  += skipped;
+            result.failed -= ai.parsed.length; // recovered by AI
+          }
         }
 
         dispatch({ type: 'SYNC_PROGRESS', processed: result.total });

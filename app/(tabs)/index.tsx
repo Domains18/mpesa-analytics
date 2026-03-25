@@ -6,6 +6,7 @@ import { useApp } from '@/store/app-context';
 import { requestSmsPermission, openAppSettings } from '@/lib/sms-reader';
 import { useState, useCallback } from 'react';
 import { router } from 'expo-router';
+import { getAiInsights } from '@/lib/ai-insights';
 
 function fmt(n: number) {
   return `Ksh ${n.toLocaleString('en-KE', { maximumFractionDigits: 0 })}`;
@@ -29,8 +30,25 @@ const TX_ICON: Record<string, string> = {
 };
 
 export default function DashboardScreen() {
-  const { monthSummary, chartData, uncategorized, syncing, loading, lastSync, syncSms, error } = useApp();
+  const { monthSummary, chartData, uncategorized, transactions, syncing, loading, lastSync, syncSms, error } = useApp();
   const [syncResult, setSyncResult] = useState<string | null>(null);
+  const [aiInsights, setAiInsights] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+
+  const handleAiAnalysis = useCallback(async () => {
+    setAiLoading(true);
+    setAiError(null);
+    setAiInsights(null);
+    try {
+      const insights = await getAiInsights(transactions, monthSummary);
+      setAiInsights(insights);
+    } catch (e: any) {
+      setAiError(e.message ?? 'AI analysis failed');
+    } finally {
+      setAiLoading(false);
+    }
+  }, [transactions, monthSummary]);
 
   const handleSync = useCallback(async () => {
     if (Platform.OS === 'android') {
@@ -64,6 +82,14 @@ export default function DashboardScreen() {
             <MaterialIcons name="person" size={22} color={Colors.white} />
           </View>
           <Text style={styles.headerTitle}>M-Pesa Analytics</Text>
+          <TouchableOpacity
+            style={[styles.syncButton, aiLoading && styles.aiButtonActive]}
+            onPress={handleAiAnalysis}
+            disabled={aiLoading}>
+            {aiLoading
+              ? <ActivityIndicator size="small" color={Colors.white} />
+              : <MaterialIcons name="auto-awesome" size={20} color={aiInsights ? Colors.white : Colors.secondary} />}
+          </TouchableOpacity>
           <TouchableOpacity style={styles.syncButton} onPress={handleSync} disabled={syncing}>
             {syncing
               ? <ActivityIndicator size="small" color={Colors.primary} />
@@ -88,6 +114,35 @@ export default function DashboardScreen() {
           <View style={[styles.syncBanner, styles.syncBannerError]}>
             <MaterialIcons name="error-outline" size={14} color={Colors.error} />
             <Text style={[styles.syncBannerText, { color: Colors.error }]}>{error}</Text>
+          </View>
+        )}
+
+        {/* AI Insights */}
+        {aiError && (
+          <View style={[styles.syncBanner, styles.syncBannerError]}>
+            <MaterialIcons name="error-outline" size={14} color={Colors.error} />
+            <Text style={[styles.syncBannerText, { color: Colors.error }]}>{aiError}</Text>
+            <TouchableOpacity onPress={() => setAiError(null)}>
+              <MaterialIcons name="close" size={16} color={Colors.error} />
+            </TouchableOpacity>
+          </View>
+        )}
+        {aiInsights && (
+          <View style={styles.aiCard}>
+            <View style={styles.aiCardHeader}>
+              <View style={styles.aiIconWrap}>
+                <MaterialIcons name="auto-awesome" size={16} color={Colors.white} />
+              </View>
+              <Text style={styles.aiCardTitle}>AI Insights</Text>
+              <TouchableOpacity onPress={() => setAiInsights(null)} style={styles.aiCloseBtn}>
+                <MaterialIcons name="close" size={16} color={Colors.onSurfaceVariant} />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.aiCardBody}>{aiInsights}</Text>
+            <TouchableOpacity style={styles.aiRefreshBtn} onPress={handleAiAnalysis} disabled={aiLoading}>
+              <MaterialIcons name="refresh" size={14} color={Colors.secondary} />
+              <Text style={styles.aiRefreshText}>Refresh analysis</Text>
+            </TouchableOpacity>
           </View>
         )}
 
@@ -329,4 +384,18 @@ const styles = StyleSheet.create({
   categorizeBtnText: { fontFamily: Fonts.inter.medium, fontSize: 10, color: Colors.primary },
   iosNotice: { flexDirection: 'row', gap: 8, alignItems: 'flex-start', backgroundColor: Colors.surfaceContainerLow, borderRadius: 12, padding: 12 },
   iosNoticeText: { flex: 1, fontFamily: Fonts.inter.regular, fontSize: 12, color: Colors.onSurfaceVariant, lineHeight: 18 },
+  aiButtonActive: { backgroundColor: Colors.secondary },
+  aiCard: {
+    marginHorizontal: 16, marginTop: 10,
+    backgroundColor: Colors.surfaceContainerLowest, borderRadius: 16, padding: 16,
+    borderWidth: 1, borderColor: Colors.secondaryContainer,
+    shadowColor: Colors.secondary, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 3,
+  },
+  aiCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+  aiIconWrap: { width: 28, height: 28, borderRadius: 8, backgroundColor: Colors.secondary, alignItems: 'center', justifyContent: 'center' },
+  aiCardTitle: { flex: 1, fontFamily: Fonts.manrope.bold, fontSize: 14, color: Colors.onSurface },
+  aiCloseBtn: { width: 28, height: 28, borderRadius: 14, backgroundColor: Colors.surfaceContainerLow, alignItems: 'center', justifyContent: 'center' },
+  aiCardBody: { fontFamily: Fonts.inter.regular, fontSize: 13, color: Colors.onSurface, lineHeight: 20 },
+  aiRefreshBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-end', marginTop: 12, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: Colors.surfaceContainerLow },
+  aiRefreshText: { fontFamily: Fonts.inter.medium, fontSize: 11, color: Colors.secondary },
 });
