@@ -1,100 +1,9 @@
 import { Platform, PermissionsAndroid, Alert, Linking } from 'react-native';
-import { RawSms } from './mpesa-parser';
+import { RawSms } from '@/types/transaction';
 
-// Type declaration for react-native-get-sms-android
-declare module 'react-native-get-sms-android' {
-  type FailCallback = (error: string) => void;
-  type SuccessCallback = (count: number, smsList: string) => void;
-  function list(filter: string, fail: FailCallback, success: SuccessCallback): void;
-}
+// ─── Types & Constants ───────────────────────────────────────────────────────
 
-export type SmsPermissionStatus =
-  | 'granted'
-  | 'denied'
-  | 'never_ask_again'
-  | 'unavailable';
-
-export function openAppSettings(): void {
-  Linking.openSettings();
-}
-
-/**
- * Request READ_SMS with an explanation Alert first, so the user understands
- * why the permission is needed before the OS dialog appears.
- * If previously denied (no dialog possible), guides the user to Settings.
- */
-export function requestSmsPermission(): Promise<SmsPermissionStatus> {
-  if (Platform.OS !== 'android') return Promise.resolve('unavailable');
-
-  return new Promise(async (resolve) => {
-    // Already granted — nothing to do
-    const alreadyGranted = await PermissionsAndroid.check(
-      PermissionsAndroid.PERMISSIONS.READ_SMS
-    );
-    if (alreadyGranted) {
-      resolve('granted');
-      return;
-    }
-
-    // Show a pre-request explanation first so the user isn't surprised
-    Alert.alert(
-      'Allow SMS Access',
-      'M-Pesa Analytics needs to read your SMS inbox to import your M-Pesa transactions automatically.\n\nOnly messages from MPESA are read — no other SMS is accessed.',
-      [
-        {
-          text: 'Not Now',
-          style: 'cancel',
-          onPress: () => resolve('denied'),
-        },
-        {
-          text: 'Continue',
-          onPress: async () => {
-            const result = await PermissionsAndroid.request(
-              PermissionsAndroid.PERMISSIONS.READ_SMS,
-              {
-                title: 'SMS Permission',
-                message: 'Allow M-Pesa Analytics to read SMS messages.',
-                buttonPositive: 'Allow',
-                buttonNegative: 'Deny',
-              }
-            );
-
-            if (result === PermissionsAndroid.RESULTS.GRANTED) {
-              resolve('granted');
-              return;
-            }
-
-            // Permission blocked — OS won't show dialog again.
-            // Guide user to enable it manually in Settings.
-            const status =
-              result === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN
-                ? 'never_ask_again'
-                : 'denied';
-
-            if (status === 'never_ask_again') {
-              Alert.alert(
-                'Permission Required',
-                'SMS permission was blocked. To enable it, open Android Settings → Apps → M-Pesa Analytics → Permissions → SMS → Allow.',
-                [
-                  { text: 'Cancel', style: 'cancel', onPress: () => resolve('never_ask_again') },
-                  {
-                    text: 'Open Settings',
-                    onPress: () => {
-                      Linking.openSettings();
-                      resolve('never_ask_again');
-                    },
-                  },
-                ]
-              );
-            } else {
-              resolve('denied');
-            }
-          },
-        },
-      ]
-    );
-  });
-}
+export type SmsPermissionStatus = 'granted' | 'denied' | 'never_ask_again' | 'unavailable';
 
 interface RawAndroidSms {
   _id: string;
@@ -103,44 +12,153 @@ interface RawAndroidSms {
   date: string;
 }
 
+const BATCH_SIZE = 500;
+const SMS_PERMISSION = PermissionsAndroid.PERMISSIONS.READ_SMS;
+
+// Dynamic import for the native module to prevent crashes on iOS/Web
+const SmsAndroid = Platform.OS === 'android' ? require('react-native-get-sms-android') : null;
+
+// ─── Permission Logic ────────────────────────────────────────────────────────
+
+const PERMISSION_STRINGS = {
+  preRequest: {
+    title: 'Allow SMS Access',
+    message: 'We only read M-Pesa messages to import transactions and provide financial insights automatically.',
+    confirm: 'Continue',
+    cancel: 'Not Now',
+  },
+  neverAsk: {
+    title: 'Permission Required',
+    message: 'We need SMS access to function. Please enable it in your app settings.',
+    confirm: 'Open Settings',
+    cancel: 'Cancel',
+  },
+};
+
+export const openAppSettings = () => Linking.openSettings();
+
 /**
- * Read M-Pesa SMS from Android inbox. Caller must ensure READ_SMS is granted.
- * Returns [] on iOS/web.
+ * Orchestrates the permission flow: Check -> Pre-alert -> Request -> Handle Denial
  */
-export function readMpesaSms(opts: { fromDate?: number } = {}): Promise<RawSms[]> {
-  if (Platform.OS !== 'android') return Promise.resolve([]);
+export async function requestSmsPermission(): Promise<SmsPermissionStatus> {
+  if (Platform.OS !== 'android') return 'unavailable';
+
+  // 1. Quick Check
+  const hasPermission = await PermissionsAndroid.check(SMS_PERMISSION);
+  if (hasPermission) return 'granted';
+
+  // 2. Educational Pre-alert (UX Best Practice)
+  const proceed = await new Promise((resolve) => {
+    Alert.alert(
+      PERMISSION_STRINGS.preRequest.title,
+      PERMISSION_STRINGS.preRequest.message,
+      [
+        { text: PERMISSION_STRINGS.preRequest.cancel, style: 'cancel', onPress: () => resolve(false) },
+        { text: PERMISSION_STRINGS.preRequest.confirm, onPress: () => resolve(true) },
+      ]
+    );
+  });
+
+  if (!proceed) return 'denied';
+
+  // 3. System Request
+  const result = await PermissionsAndroid.request(SMS_PERMISSION);
+
+  if (result === PermissionsAndroid.RESULTS.GRANTED) return 'granted';
+
+  if (result === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN) {
+    return new Promise((resolve) => {
+      Alert.alert(
+        PERMISSION_STRINGS.neverAsk.title,
+        PERMISSION_STRINGS.neverAsk.message,
+        [
+          { text: PERMISSION_STRINGS.neverAsk.cancel, style: 'cancel', onPress: () => resolve('never_ask_again') },
+          { text: PERMISSION_STRINGS.neverAsk.confirm, onPress: () => { openAppSettings(); resolve('never_ask_again'); } },
+        ]
+      );
+    });
+  }
+
+  return 'denied';
+}
+
+// ─── Fetching Logic ──────────────────────────────────────────────────────────
+
+/**
+ * Wraps the callback-based native module in a clean Promise
+ */
+async function fetchSmsBatch(options: { fromDate?: number; indexFrom: number }): Promise<RawSms[]> {
+  if (!SmsAndroid) return [];
+
+  const filter = {
+    box: 'inbox',
+    // We filter for MPESA at the OS level to reduce data bridge overhead
+    address: 'MPESA',
+    maxCount: BATCH_SIZE,
+    indexFrom: options.indexFrom,
+    ...(options.fromDate && { minDate: options.fromDate }),
+  };
 
   return new Promise((resolve, reject) => {
-    const SmsAndroid = require('react-native-get-sms-android');
-
-    const filter: Record<string, unknown> = {
-      box: 'inbox',
-      maxCount: 2000,
-      // 'MPESA' is the standard sender name on Safaricom Kenya
-      address: 'MPESA',
-    };
-
-    if (opts.fromDate) {
-      filter.minDate = opts.fromDate;
-    }
     SmsAndroid.list(
       JSON.stringify(filter),
-      (err: string) => reject(new Error(`SMS read failed: ${err}`)),
+      (fail: string) => reject(new Error(`Native SMS Error: ${fail}`)),
       (_count: number, smsList: string) => {
         try {
           const raw: RawAndroidSms[] = JSON.parse(smsList);
-          resolve(
-            raw.map((s) => ({
-              id: s._id,
-              address: s.address,
-              body: s.body,
-              date: parseInt(s.date, 10),
-            }))
-          );
+          const mapped = raw.map((sms) => ({
+            id: sms._id,
+            address: sms.address,
+            body: sms.body,
+            date: Number(sms.date),
+          }));
+          resolve(mapped);
         } catch (e) {
-          reject(e);
+          reject(new Error('Failed to parse SMS JSON from native module'));
         }
       }
     );
   });
+}
+
+/**
+ * High-level Generator to stream batches of SMS
+ */
+export async function* readMpesaSmsBatched(
+  opts: { fromDate?: number } = {}
+): AsyncGenerator<RawSms[]> {
+  if (Platform.OS !== 'android') return;
+
+  // Ensure we have permissions before attempting to read
+  const hasPermission = await PermissionsAndroid.check(SMS_PERMISSION);
+  if (!hasPermission) throw new Error('SMS Permission not granted');
+
+  let indexFrom = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    try {
+      const batch = await fetchSmsBatch({
+        fromDate: opts.fromDate,
+        indexFrom,
+      });
+
+      if (batch.length === 0) {
+        hasMore = false;
+        break;
+      }
+
+      yield batch;
+
+      // If we got fewer results than requested, we've hit the end of the inbox
+      if (batch.length < BATCH_SIZE) {
+        hasMore = false;
+      } else {
+        indexFrom += BATCH_SIZE;
+      }
+    } catch (error) {
+      console.error('[SMS_READER_ERROR]', error);
+      hasMore = false; // Stop on error to prevent infinite loops
+    }
+  }
 }
