@@ -92,7 +92,7 @@ async function InvokeAI(
   // });
 
   const openRouter = new OpenRouter({
-    apiKey: '<OPENROUTER_API_KEY>',
+    apiKey: apiKey,
   });
 
   const response = await openRouter.callModel({
