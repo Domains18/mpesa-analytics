@@ -79,7 +79,6 @@ export default function SettingsScreen() {
     (async () => {
       const enabled = await isAiParserEnabled();
       const key = await getApiKey();
-      console.log('AI Parser enabled:', enabled, 'API Key exists:', !!key);
       setAiEnabled(enabled);
       setHasApiKey(!!key);
     })();

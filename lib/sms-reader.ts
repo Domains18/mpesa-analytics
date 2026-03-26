@@ -159,5 +159,4 @@ export async function syncAllMpesaSms(): Promise<void> {
   }
 
   await logSync(totalImported, totalSkipped, totalFailed);
-  console.log(`[MPESA_SYNC] Completed ${batchCount} batches: imported=${totalImported}, skipped=${totalSkipped}, failed=${totalFailed}`);
 }

@@ -112,7 +112,6 @@ async function InvokeAI(
   const text = await response.getText();
   const data = await JSON.parse(text);
 
-  console.log('[AI_RESPONSE]', data);
 
   // Extract JSON array from response
   const jsonMatch = data.match(/\[[\s\S]*\]/);
@@ -168,7 +167,6 @@ export async function aiParseBatch(
     return { parsed: [], failed: failedMessages.length };
   }
 
-  console.log(apiKey)
 
   const parsed: Transaction[] = [];
   let failed = 0;
