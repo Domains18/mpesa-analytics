@@ -16,28 +16,6 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
    npx expo start
    ```
 
-3. create the `ai-config` file inside the lib directory
-```typescript
-import * as SecureStore from 'expo-secure-store';
-
-
-
-const AI_ENABLED_STORE = 'ai_parser_enabled';
-
-export async function getApiKey(): Promise<string | null> {
-  return "sk-or-v1-some-api-key";
-}
-
-
-export async function isAiParserEnabled(): Promise<boolean> {
-  const val = await SecureStore.getItemAsync(AI_ENABLED_STORE);
-  return val === 'true';
-}
-
-export async function setAiParserEnabled(enabled: boolean): Promise<void> {
-  await SecureStore.setItemAsync(AI_ENABLED_STORE, enabled ? 'true' : 'false');
-}
-```
 In the output, you'll find options to open the app in a
 
 - [development build](https://docs.expo.dev/develop/development-builds/introduction/)

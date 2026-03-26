@@ -1,6 +1,7 @@
 import { Transaction, TransactionType } from '@/types/transaction';
 import { getApiKey, isAiParserEnabled } from '@/lib/ai-config';
 import { OpenRouter } from '@openrouter/sdk';
+import Config from 'react-native-config';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -26,8 +27,9 @@ const VALID_TYPES: TransactionType[] = [
   'airtime', 'fuliza', 'reversal', 'unknown',
 ];
 
-const API_URL = 'https://api.anthropic.com/v1/messages';
-const MODEL = 'claude-haiku-4-5-20251001';
+//uncomment this if you want to use Claude
+// const API_URL = 'https://api.anthropic.com/v1/messages';
+// const MODEL = 'claude-haiku-4-5-20251001';
 const MAX_BATCH = 20; // Max SMS per API call to stay within token limits
 
 // ─── System Prompt ───────────────────────────────────────────────────────────
@@ -63,33 +65,37 @@ async function InvokeAI(
   apiKey: string,
   messages: SmsBatchItem[],
 ): Promise<(AiParsedTransaction | null)[]> {
-  // const userContent = messages
-  //   .map((m) => `[${m.index}] ${m.body}`)
-  //   .join('\n\n---\n\n');
 
-  // const response = await fetch(API_URL, {
-  //   method: 'POST',
-  //   headers: {
-  //     'Content-Type': 'application/json',
-  //     'x-api-key': apiKey,
-  //     'anthropic-version': '2023-06-01',
-  //   },
-  //   body: JSON.stringify({
-  //     model: MODEL,
-  //     max_tokens: 4096,
-  //     system: SYSTEM_PROMPT,
-  //     messages: [
-  //       {
-  //         role: 'user',
-  //         content: `Parse these ${messages.length} M-Pesa SMS messages. Return a JSON array where each element corresponds to the message index. Use null for unparseable messages.\n\n${userContent}`,
-  //       },
-  //       {
-  //         role: 'assistant',
-  //         content: '[',
-  //       },
-  //     ],
-  //   }),
-  // });
+  //uncomment this line to use claude
+  /**
+  const userContent = messages
+    .map((m) => `[${m.index}] ${m.body}`)
+    .join('\n\n---\n\n');
+
+  const response = await fetch(API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: MODEL,
+      max_tokens: 4096,
+      system: SYSTEM_PROMPT,
+      messages: [
+        {
+          role: 'user',
+          content: `Parse these ${messages.length} M-Pesa SMS messages. Return a JSON array where each element corresponds to the message index. Use null for unparseable messages.\n\n${userContent}`,
+        },
+        {
+          role: 'assistant',
+          content: '[',
+        },
+      ],
+    }),
+  });
+  */
 
   const openRouter = new OpenRouter({
     apiKey: apiKey,
@@ -106,7 +112,6 @@ async function InvokeAI(
   const text = await response.getText();
   const data = await JSON.parse(text);
 
-  console.log('[AI_RESPONSE]', data);
 
   // Extract JSON array from response
   const jsonMatch = data.match(/\[[\s\S]*\]/);
@@ -161,6 +166,7 @@ export async function aiParseBatch(
   if (!enabled || !apiKey || failedMessages.length === 0) {
     return { parsed: [], failed: failedMessages.length };
   }
+
 
   const parsed: Transaction[] = [];
   let failed = 0;

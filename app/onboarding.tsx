@@ -1,10 +1,25 @@
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform, PermissionsAndroid } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Colors, Fonts } from '@/constants/theme';
 
+async function requestAppPermissions() {
+  if (Platform.OS !== 'android') return;
+  // Request all permissions the app needs in one shot.
+  // The onboarding screen already explains why, so no pre-alert is needed here.
+  await PermissionsAndroid.requestMultiple([
+    PermissionsAndroid.PERMISSIONS.READ_SMS,
+    PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE,
+  ]);
+}
+
 export default function OnboardingScreen() {
+  const handleGetStarted = async () => {
+    await requestAppPermissions();
+    router.replace('/(tabs)');
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView
@@ -56,7 +71,7 @@ export default function OnboardingScreen() {
         <TouchableOpacity
           style={styles.ctaButton}
           activeOpacity={0.85}
-          onPress={() => router.replace('/(tabs)')}>
+          onPress={handleGetStarted}>
           <Text style={styles.ctaText}>Get Started</Text>
           <MaterialIcons name="arrow-forward" size={18} color={Colors.white} />
         </TouchableOpacity>

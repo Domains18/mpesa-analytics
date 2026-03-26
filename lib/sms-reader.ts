@@ -1,5 +1,7 @@
 import { Platform, PermissionsAndroid, Alert, Linking } from 'react-native';
 import { RawSms } from '@/types/transaction';
+import { insertTransactions, logSync } from '@/lib/database';
+import { parseMpesaBatch } from '@/lib/mpesa-parser';
 
 // ─── Types & Constants ───────────────────────────────────────────────────────
 
@@ -20,48 +22,20 @@ const SmsAndroid = Platform.OS === 'android' ? require('react-native-get-sms-and
 
 // ─── Permission Logic ────────────────────────────────────────────────────────
 
-const PERMISSION_STRINGS = {
-  preRequest: {
-    title: 'Allow SMS Access',
-    message: 'We only read M-Pesa messages to import transactions and provide financial insights automatically.',
-    confirm: 'Continue',
-    cancel: 'Not Now',
-  },
-  neverAsk: {
-    title: 'Permission Required',
-    message: 'We need SMS access to function. Please enable it in your app settings.',
-    confirm: 'Open Settings',
-    cancel: 'Cancel',
-  },
-};
-
 export const openAppSettings = () => Linking.openSettings();
 
 /**
- * Orchestrates the permission flow: Check -> Pre-alert -> Request -> Handle Denial
+ * Checks / requests READ_SMS. The onboarding screen handles the initial
+ * prompt, so this path (sync button) skips any pre-alert and goes straight
+ * to the system dialog. If the user previously denied with "Don't ask again"
+ * we surface a Settings shortcut.
  */
 export async function requestSmsPermission(): Promise<SmsPermissionStatus> {
   if (Platform.OS !== 'android') return 'unavailable';
 
-  // 1. Quick Check
   const hasPermission = await PermissionsAndroid.check(SMS_PERMISSION);
   if (hasPermission) return 'granted';
 
-  // 2. Educational Pre-alert (UX Best Practice)
-  const proceed = await new Promise((resolve) => {
-    Alert.alert(
-      PERMISSION_STRINGS.preRequest.title,
-      PERMISSION_STRINGS.preRequest.message,
-      [
-        { text: PERMISSION_STRINGS.preRequest.cancel, style: 'cancel', onPress: () => resolve(false) },
-        { text: PERMISSION_STRINGS.preRequest.confirm, onPress: () => resolve(true) },
-      ]
-    );
-  });
-
-  if (!proceed) return 'denied';
-
-  // 3. System Request
   const result = await PermissionsAndroid.request(SMS_PERMISSION);
 
   if (result === PermissionsAndroid.RESULTS.GRANTED) return 'granted';
@@ -69,12 +43,12 @@ export async function requestSmsPermission(): Promise<SmsPermissionStatus> {
   if (result === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN) {
     return new Promise((resolve) => {
       Alert.alert(
-        PERMISSION_STRINGS.neverAsk.title,
-        PERMISSION_STRINGS.neverAsk.message,
+        'Permission Required',
+        'SMS access was blocked. Please enable it in Settings to sync your M-Pesa transactions.',
         [
-          { text: PERMISSION_STRINGS.neverAsk.cancel, style: 'cancel', onPress: () => resolve('never_ask_again') },
-          { text: PERMISSION_STRINGS.neverAsk.confirm, onPress: () => { openAppSettings(); resolve('never_ask_again'); } },
-        ]
+          { text: 'Cancel', style: 'cancel', onPress: () => resolve('never_ask_again') },
+          { text: 'Open Settings', onPress: () => { openAppSettings(); resolve('never_ask_again'); } },
+        ],
       );
     });
   }
@@ -161,4 +135,28 @@ export async function* readMpesaSmsBatched(
       hasMore = false; // Stop on error to prevent infinite loops
     }
   }
+}
+
+/**
+ * Sync all MPESA SMS messages by reading batches, parsing, and storing them.
+ * This function iterates over all batches provided by readMpesaSmsBatched(),
+ * parses each batch into transactions, inserts them into the database, and
+ * logs the synchronization result.
+ */
+export async function syncAllMpesaSms(): Promise<void> {
+  let totalImported = 0;
+  let totalSkipped = 0;
+  let totalFailed = 0;
+  let batchCount = 0;
+
+  for await (const batch of readMpesaSmsBatched()) {
+    batchCount++;
+    const { parsed, failed } = parseMpesaBatch(batch);
+    const result = await insertTransactions(parsed);
+    totalImported += result.imported;
+    totalSkipped += result.skipped;
+    totalFailed += failed;
+  }
+
+  await logSync(totalImported, totalSkipped, totalFailed);
 }
